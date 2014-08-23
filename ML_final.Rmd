@@ -1,0 +1,99 @@
+---
+title: "MachineLearning"
+author: "Bas Overtoom"
+date: "Thursday, August 21, 2014"
+output: html_document
+---
+## Machine Learning: HAR assignment
+
+Human Activity Recognition - HAR - has emerged as a key research area in the last years and is gaining increasing attention by the pervasive computing research community especially for the development of context-aware systems.
+For this research we use database from - http://groupware.les.inf.puc-rio.br/har
+
+Six young health participants were asked to perform one set of 10 repetitions of the Unilateral Dumbbell Biceps Curl in five different fashions: exactly according to the specification (Class A), throwing the elbows to the front (Class B), lifting the dumbbell only halfway (Class C), lowering the dumbbell only halfway (Class D) and throwing the hips to the front (Class E).
+
+With downloaded training-set we construct two prediction models. Since the RandomForest model will turn out to have very good results, this model is used for the final predictions on the test set. 
+
+
+### Preparations dataset
+
+We first load the required libraries we will need later in the progress. 
+Then we download the training and test set to our computer with the following code:
+
+```
+TrainFileURL <- 'https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv'
+download.file(TrainFileURL, destfile = './train.csv')
+TestFileURL <- 'https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv'
+download.file(TestFileURL, destfile = './test.csv')
+```
+When downloaded we check for missing values
+
+```{r, restult='hide', warning=FALSE, message=FALSE}
+set.seed(7744)
+library(caret)
+library(rpart)
+library(randomForest)
+train <- read.csv('train.csv')
+test <- read.csv('test.csv')
+```
+
+When checking the NA's we see that if the Colum has any NA's mostly is has many. In the Training set there are 67 colums that contain 19216 missing values. The test-set has even 100 colums that contain 20 missing values (100%, since there are only 20 observations in the test set). Since these coloms with this large amount of NA's can not be use in the build a prediction model in the training set, and can also not support in better accurancy in the test set, we decide to remove all the NA-colums within both Training as well as the Test set. A check makes clear that the missing values columns of the test contain all missing values columns of the train set - so we can process by subsetting the Training and Test set with the missing value colums of the Test set. After examination of the columns we decided that the first 7 columns do not have any value as good predictors, so these columns will also be removed for both training and test set. 
+
+```{r}
+table(apply(is.na(train),2,sum))
+table(apply(is.na(test),2,sum))
+trainNA <- apply(is.na(train),2,any)
+testNA <- apply(is.na(test),2,any)
+table(testNA|trainNA)
+train <- train[,!testNA]
+test <- test[,!testNA]
+train <- train[,-(1:7)]
+test <- test[,-(1:7)]
+```
+
+After the subsetting we divide the train set is a 60% trianing set and 40% test set. 
+```{r}
+set.seed(7755)
+inTrain <- createDataPartition(train$classe, p = 0.6, list=FALSE)
+train <- train[inTrain,]
+cross_val <- train[-inTrain,]
+```
+
+### Fit models
+
+After these preparatoins we can fit the model. We will compare three different models to see with one has the best effect. The models are:
+
+* Rpart
+* Random Forrest
+
+#### Rpart
+
+When setting the model with the RPART method in the train-fuction and testing this to the Cross validation set. We get an accurary of less than 50%, so this is still quite some 'flaws' in this prediction model. 
+
+```{r}
+set.seed(7755)
+modFit_Rpart <- train(classe ~., data = train, method="rpart")
+pred_Rpart <- predict(modFit_Rpart, newdata = cross_val)
+plot(pred_Rpart, cross_val$classe)
+confusionMatrix(pred_Rpart, cross_val$classe)
+```
+
+#### Random forest
+
+When constructing a model with Random Forest we get almost a perfect perdiction on the training set and actually a perfect prediction on the cross_validation set. So this is the model we settle for. 
+
+```{r}
+set.seed(7777)
+modFit_RF <- randomForest(classe ~., data = train, importance = TRUE)
+pred_RF <- predict(modFit_RF, newdata = cross_val)
+plot(pred_RF, cross_val$classe)
+confusionMatrix(pred_RF, cross_val$classe)
+```
+
+#### Predict with the test data set
+
+Lastly we use the Model-Fit of the RandomForest to predict the values of the test set.
+
+```{r}
+pred_test <- predict(modFit_RF, test)
+pred_test
+```
